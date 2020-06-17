@@ -1,0 +1,259 @@
+unit wol;
+
+interface
+
+uses
+  WinTypes, WinProcs, Classes, SysUtils, Winsock;
+
+type
+  TBroadcastType = (dwLocalSubnet, dwInternet);
+
+  TWakeOnLan = class(TComponent)
+  private
+    { Private declarations }
+    FMacAddress:string;
+    FBroadcastType:TBroadcastType;
+    FPortNumber:integer;
+    FInternetAddress:string;
+    FSubnetMask:string;
+    procedure SetMacAddress(value : string);
+    procedure SetPortNumber(value : integer);
+    procedure SetInternetAddress(value : string);
+    procedure SetSubnetMask(value : string);
+  protected
+    { Protected declarations }
+  public
+    { Public declarations }
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+  published
+    { Published declarations }
+    property MacAddress: string read FMacAddress write SetMacAddress;
+    property BroadcastType: TBroadcastType read FBroadcastType write FBroadcastType;
+    property PortNumber:integer read FPortNumber write SetPortNumber;
+    property InternetAddress:string read FInternetAddress write SetInternetAddress;
+    property SubnetMask:string read FSubnetMask write SetSubnetMask;
+    function SendMagicPacket:integer;
+  end;
+
+procedure Register;
+
+implementation
+
+constructor TWakeOnLan.Create(AOwner : TComponent);
+begin
+FMacAddress:='00-00-00-00-00-00';
+FPortNumber:=7;
+FInternetAddress:='10.43.43.10';
+FSubnetMask:='255.0.0.0';
+  inherited Create(AOwner);
+end;
+
+destructor TWakeOnLan.Destroy;
+begin
+  inherited Destroy;
+end;
+
+procedure TWakeOnLan.SetMacAddress(value : string);
+begin
+if Length(value) <> 17 then
+raise Exception.Create('Invalid Mac Address');
+FMacAddress := value;
+end;
+
+procedure TWakeOnLan.SetInternetAddress(value : string);
+begin
+if Length(value) > 17 then
+raise Exception.Create('Invalid Internet Address');
+FInternetAddress := value;
+end;
+
+procedure TWakeOnLan.SetSubnetMask(value : string);
+begin
+if Length(value) > 17 then
+raise Exception.Create('Invalid Internet Address');
+FSubnetMask := value;
+end;
+
+procedure TWakeOnLan.SetPortNumber(value : integer);
+begin
+if (value < 1) or (value > 64000) then
+raise Exception.Create('Port Out Of Range');
+FPortNumber := value;
+end;
+
+function HexToInt(Hex : string) : Integer;
+const HexSymbols : string = '0123456789ABCDEF';
+var I,J : Integer;
+begin
+  Hex := UpperCase(Hex);
+  Result := 0;
+  J := Length(Hex);
+  For I := 1 to J do
+    Result := Result+((Pos(Hex[J-I+1],HexSymbols)-1) shl ((I-1)*4));
+end;
+
+function BinaryToInt(szBin: string ) :integer;
+var i : integer;
+begin
+    Result :=0;
+    for i:=1 to Length(szBin) do
+        Result := (Result shl 1)+ (Ord(szBin[i]) - Ord('0'));
+end;
+
+function IntToBin(Value:integer):string;
+begin
+  Result:='';
+  repeat
+    Result:=chr(ord('0') + Value and 1) + Result;
+    Value:=Value shr 1
+  until Value=0;
+  while Length(Result) < 8 do
+  Result:= '0' + Result;
+end;
+
+function InvertBinary(value:string):string;
+var
+x:integer;
+begin
+Result:='';
+for x:= 1 to Length(value) do
+        begin
+        if Copy(Value,x,1) = '0' then Result:= Result + '1'
+        else
+        Result:= Result + '0';
+        end;
+end;
+
+function OrIt(value1:string;value2:string):string;
+var
+x:integer;
+begin
+Result:='';
+for x:= 1 to 8 do
+        begin
+        if (Copy(Value1,x,1) = '1') or (Copy(Value2,x,1) = '1') then
+        Result:= Result + '1'
+        else
+        Result:= Result + '0';
+        end;
+end;
+
+function TWakeOnLan.SendMagicPacket:integer;
+var
+sd:TSocket;
+t:Bool;
+a,b,c,d,e,f,ff,i,x:integer;
+buf:array [0..101] of Char;
+wt:TSockAddr;
+WSAData: TWSAData;
+ip1,ip2,ip3,ip4:integer;
+sub1,sub2,sub3,sub4:integer;
+da1,da2,da3,da4:string;
+TheIpAddress, TheSubnetMask:string;
+TheTotal:array [0..14] of Char;
+begin
+        try
+a:=HexToInt(Copy(MacAddress,1,2));
+b:=HexToInt(Copy(MacAddress,4,2));
+c:=HexToInt(Copy(MacAddress,7,2));
+d:=HexToInt(Copy(MacAddress,10,2));
+e:=HexToInt(Copy(MacAddress,13,2));
+f:=HexToInt(Copy(MacAddress,16,2));
+        except
+Result:=1;
+Exit;
+        end;
+
+        try
+TheIpAddress:= InternetAddress;
+ip1:= StrToInt(Copy(TheIpAddress,1, Pos('.',TheIpAddress) -1));
+Delete(TheIpAddress,1, Pos('.',TheIpAddress));
+ip2:= StrToInt(Copy(TheIpAddress,1, Pos('.',TheIpAddress) -1));
+Delete(TheIpAddress,1, Pos('.',TheIpAddress));
+ip3:= StrToInt(Copy(TheIpAddress,1, Pos('.',TheIpAddress) -1));
+Delete(TheIpAddress,1, Pos('.',TheIpAddress));
+ip4:= StrToInt(TheIpAddress);
+        except
+Result:=2;
+Exit;
+        end;
+
+        try
+TheSubnetMask:= SubnetMask;
+sub1:= StrToInt(Copy(TheSubnetMask,1, Pos('.',TheSubnetMask) -1));
+Delete(TheSubnetMask,1, Pos('.',TheSubnetMask));
+sub2:= StrToInt(Copy(TheSubnetMask,1, Pos('.',TheSubnetMask) -1));
+Delete(TheSubnetMask,1, Pos('.',TheSubnetMask));
+sub3:= StrToInt(Copy(TheSubnetMask,1, Pos('.',TheSubnetMask) -1));
+Delete(TheSubnetMask,1, Pos('.',TheSubnetMask));
+sub4:= StrToInt(TheSubnetMask);
+        except
+Result:=3;
+Exit;
+        end;
+
+da1:=IntToStr(BinaryToInt(OrIt(IntToBin(ip1),InvertBinary(IntToBin(sub1)))));
+da2:=IntToStr(BinaryToInt(OrIt(IntToBin(ip2),InvertBinary(IntToBin(sub2)))));
+da3:=IntToStr(BinaryToInt(OrIt(IntToBin(ip3),InvertBinary(IntToBin(sub3)))));
+da4:=IntToStr(BinaryToInt(OrIt(IntToBin(ip4),InvertBinary(IntToBin(sub4)))));
+
+StrPCopy(TheTotal,da1 + '.' + da2 + '.' + da3 + '.' + da4);
+
+ff:=HexToInt('ff');
+
+for x:= 0 to 5 do
+        begin
+        buf[x]:= Chr(ff);
+        end;
+i:=6;
+for x:= 1 to 16 do
+    begin
+    buf[i]:=Chr(a);
+    i:= i + 1;
+    buf[i]:=Chr(b);
+    i:= i + 1;
+    buf[i]:=Chr(c);
+    i:= i + 1;
+    buf[i]:=Chr(d);
+    i:= i + 1;
+    buf[i]:=Chr(e);
+    i:= i + 1;
+    buf[i]:=Chr(f);
+    i:= i + 1;
+    end;
+wt.sin_family:=AF_INET;
+wt.sin_port:=PortNumber;
+if BroadcastType = dwLocalSubnet then
+wt.sin_addr.S_addr:=inet_addr('255.255.255.255')
+else
+wt.sin_addr.S_addr:=inet_addr(TheTotal);
+t:=True;
+
+if WSAStartup($101, WSAData) = 0 then
+        begin
+        try
+sd:=socket(AF_INET, SOCK_DGRAM, 0);
+setsockopt(sd, SOL_SOCKET, SO_BROADCAST, pchar(@t), sizeof(t));
+sendto(sd, buf, Length(Buf) , 0, wt, SizeOf(wt));
+closesocket(sd);
+        finally
+WSACleanup;
+        end;
+        end
+        else
+        begin
+Result:=5;
+Exit;
+        end;
+
+Result:=0;
+end;
+
+procedure Register;
+begin
+  RegisterComponents('Internet', [TWakeOnLan]);
+end;
+
+end.
+ 
